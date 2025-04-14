@@ -23,7 +23,7 @@ gemini_model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
 class GrokClient:
     def __init__(self, api_key):
         self.api_key = api_key
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             api_key=self.api_key,
             base_url="https://api.x.ai/v1"
         )
