@@ -1,5 +1,6 @@
 # llm_clients.py
 import os
+import requests
 import json
 import re
 import logging
@@ -21,32 +22,44 @@ gemini_model = genai.GenerativeModel('gemini-pro')
 class GrokClient:
     def __init__(self, api_key):
         self.api_key = api_key
-        self.chat = type('obj', (object,), {
-            'completions': type('obj', (object,), {
-                'create': self.create
-            })
-        })
+        self.base_url = "https://api.x.ai/grok/v1"  # Replace with actual xAI API endpoint
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
     
     async def create(self, model, messages, temperature, max_tokens):
-        # Placeholder implementation
-        logger.warning("Using mock Grok implementation - replace with actual API when available")
-        return type('obj', (object,), {
-            'choices': [
-                type('obj', (object,), {
-                    'message': type('obj', (object,), {
-                        'content': json.dumps({
-                            "buy_price": {"min": 1100, "max": 1300, "explanation": "Mock Grok response"},
-                            "max_profit_price": {"min": 2200, "max": 2400, "explanation": "Mock Grok response"},
-                            "quick_sale_price": {"min": 1800, "max": 1950, "explanation": "Mock Grok response"},
-                            "expected_sale_price": {"min": 1750, "max": 2000, "explanation": "Mock Grok response"},
-                            "estimated_time_to_sell": {"min": 5, "max": 14, "unit": "days", "explanation": "Mock Grok response"},
-                            "factors": ["Factor 1", "Factor 2", "Factor 3"],
-                            "market_analysis": "Mock market analysis from Grok"
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+        
+        try:
+            # Use requests for simplicity; for async, consider aiohttp in production
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=self.headers,
+                json=payload,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            return type('obj', (object,), {
+                'choices': [
+                    type('obj', (object,), {
+                        'message': type('obj', (object,), {
+                            'content': result.get('choices', [{}])[0].get('message', {}).get('content', '')
                         })
                     })
-                })
-            ]
-        })
+                ]
+            })
+        
+        except Exception as e:
+            logger.error(f"Grok API request failed: {e}")
+            raise
 
 # Initialize Grok (replace with actual when available)
 grok_client = GrokClient(api_key=os.environ.get("GROK_API_KEY"))

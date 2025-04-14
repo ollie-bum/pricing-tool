@@ -20,6 +20,8 @@ import asyncio
 from dotenv import load_dotenv
 from datetime import datetime
 import sys
+import flask
+import werkzeug
 print("Python version:", sys.version)
 print("Werkzeug version:", werkzeug.__version__)
 print("Flask version:", flask.__version__)
