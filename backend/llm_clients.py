@@ -6,7 +6,7 @@ import re
 import logging
 import anthropic
 import google.generativeai as genai
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,13 +17,13 @@ anthropic_client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY
 
 # Initialize Gemini
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
-gemini_model = genai.GenerativeModel('gemini-pro')
+gemini_model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
 
 # Placeholder for Grok
 class GrokClient:
     def __init__(self, api_key):
         self.api_key = api_key
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             api_key=self.api_key,
             base_url="https://api.x.ai/v1"
         )
