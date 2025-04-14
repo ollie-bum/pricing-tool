@@ -41,6 +41,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
+@app.route("/")
+def index():
+    return "✅ Pricing Tool API is live!"
+
+
 async def get_all_llm_pricing(product_info, use_sources):
     """Get pricing from all enabled LLMs in parallel"""
     tasks = []
