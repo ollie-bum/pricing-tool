@@ -43,6 +43,7 @@ CORS(app)  # Enable CORS for all routes
 
 @app.route("/")
 def index():
+    print("📥 Received GET / request")
     return "✅ Pricing Tool API is live!"
 
 
