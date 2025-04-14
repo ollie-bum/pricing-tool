@@ -1,4 +1,16 @@
 # app.py
+
+# At the top of your app.py file
+try:
+    from werkzeug.urls import url_quote
+except ImportError:
+    # Fallback for newer Werkzeug versions
+    try:
+        from werkzeug.urls import quote as url_quote
+    except ImportError:
+        # Last resort fallback
+        from urllib.parse import quote as url_quote
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
@@ -7,11 +19,15 @@ import logging
 import asyncio
 from dotenv import load_dotenv
 from datetime import datetime
+import sys
+print("Python version:", sys.version)
+print("Werkzeug version:", werkzeug.__version__)
+print("Flask version:", flask.__version__)
 
 # Import our modules
-from llm_clients import get_claude_pricing, get_gemini_pricing, get_grok_pricing
-from aggregator import aggregate_results
-from cache import get_cached_result, store_result
+from backend.llm_clients import get_claude_pricing, get_gemini_pricing, get_grok_pricing
+from backend.aggregator import aggregate_results
+from backend.cache import get_cached_result, store_result
 
 # Load environment variables
 load_dotenv()
