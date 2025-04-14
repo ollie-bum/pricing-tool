@@ -8,3 +8,4 @@ requests==2.28.2
 firebase-admin==6.2.0
 werkzeug==2.2.3
 openai==1.72.0
+httpx==0.24.1
