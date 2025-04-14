@@ -6,6 +6,7 @@ import re
 import logging
 import anthropic
 import google.generativeai as genai
+from openai import OpenAI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,41 +23,21 @@ gemini_model = genai.GenerativeModel('gemini-pro')
 class GrokClient:
     def __init__(self, api_key):
         self.api_key = api_key
-        self.base_url = "https://api.x.ai/grok/v1"  # Replace with actual xAI API endpoint
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.x.ai/v1"
+        )
+        self.chat = self.client.chat
     
     async def create(self, model, messages, temperature, max_tokens):
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens
-        }
-        
         try:
-            # Use requests for simplicity; for async, consider aiohttp in production
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=self.headers,
-                json=payload,
-                timeout=30
+            response = await self.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
             )
-            response.raise_for_status()
-            
-            result = response.json()
-            return type('obj', (object,), {
-                'choices': [
-                    type('obj', (object,), {
-                        'message': type('obj', (object,), {
-                            'content': result.get('choices', [{}])[0].get('message', {}).get('content', '')
-                        })
-                    })
-                ]
-            })
-        
+            return response
         except Exception as e:
             logger.error(f"Grok API request failed: {e}")
             raise
@@ -227,7 +208,7 @@ async def get_grok_pricing(product_info):
     try:
         # Call Grok API (implementation may vary based on actual API structure)
         response = await grok_client.chat.completions.create(
-            model="grok-1",
+            model="grok-3-beta",
             messages=[
                 {"role": "system", "content": "You are a luxury goods pricing expert with extensive knowledge of the resale market."},
                 {"role": "user", "content": prompt}
