@@ -46,6 +46,10 @@ def index():
     print("📥 Received GET / request")
     return "✅ Pricing Tool API is live!"
 
+@app.route("/api/models", methods=["GET"])
+def get_models():
+    return jsonify({"models": ["claude", "gemini", "grok"]})
+
 
 async def get_all_llm_pricing(product_info, use_sources):
     """Get pricing from all enabled LLMs in parallel"""
