@@ -59,7 +59,7 @@ class User(UserMixin):
 # Load user from database
 @login_manager.user_loader
 def load_user(user_id):
-    conn = sqlite3.connect('users.db')
+    conn = sqlite3.connect('/opt/render/project/src/data/users.db')
     cursor = conn.cursor()
     cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
     user = cursor.fetchone()
