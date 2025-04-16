@@ -50,25 +50,40 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    conn = sqlite3.connect('/opt/render/project/src/data/users.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
-    user = cursor.fetchone()
-    conn.close()
-    return User(user[0], user[1]) if user else None
+    db_path = '/opt/render/project/src/data/users.db'
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        conn.close()
+        return User(user[0], user[1]) if user else None
+    except sqlite3.OperationalError as e:
+        logger.error(f"Failed to connect to database {db_path}: {e}")
+        return None
 
 def init_db():
-    conn = sqlite3.connect('/opt/render/project/src/data/users.db')
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+    db_dir = '/opt/render/project/src/data'
+    db_path = os.path.join(db_dir, 'users.db')
+    try:
+        os.makedirs(db_dir, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Failed to create directory {db_dir}: {e}")
+        return
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except sqlite3.OperationalError as e:
+        logger.error(f"Failed to initialize database {db_path}: {e}")
 
 init_db()
 
@@ -79,16 +94,21 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        conn = sqlite3.connect('/opt/render/project/src/data/users.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
-        user = cursor.fetchone()
-        conn.close()
-        if user and bcrypt.checkpw(password.encode('utf-8'), user[2].encode('utf-8')):
-            user_obj = User(user[0], user[1])
-            login_user(user_obj)
-            return jsonify({"success": True, "redirect": url_for('index')})
-        return jsonify({"error": "Invalid username or password"}), 401
+        db_path = '/opt/render/project/src/data/users.db'
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
+            user = cursor.fetchone()
+            conn.close()
+            if user and bcrypt.checkpw(password.encode('utf-8'), user[2].encode('utf-8')):
+                user_obj = User(user[0], user[1])
+                login_user(user_obj)
+                return jsonify({"success": True, "redirect": url_for('index')})
+            return jsonify({"error": "Invalid username or password"}), 401
+        except sqlite3.OperationalError as e:
+            logger.error(f"Database error during login: {e}")
+            return jsonify({"error": "Database unavailable"}), 500
     return app.send_static_file('login.html')
 
 @app.route('/logout')
