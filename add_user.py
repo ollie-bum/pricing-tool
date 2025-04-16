@@ -4,7 +4,7 @@ import bcrypt
 import argparse
 
 def init_db():
-    conn = sqlite3.connect('users.db')
+    conn = sqlite3.connect('/opt/render/project/src/data/users.db')
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -19,7 +19,7 @@ def init_db():
 def add_user(username, password):
     init_db()  # Ensure table exists
     password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    conn = sqlite3.connect('users.db')
+    conn = sqlite3.connect('/opt/render/project/src/data/users.db')
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
