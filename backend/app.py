@@ -1,4 +1,4 @@
-# app.py
+# backend/app.py
 try:
     from werkzeug.urls import url_quote
 except ImportError:
@@ -25,9 +25,9 @@ print("Python version:", sys.version)
 print("Werkzeug version:", werkzeug.__version__)
 print("Flask version:", flask.__version__)
 
-from backend.llm_clients import get_claude_pricing, get_gemini_pricing, get_grok_pricing
-from backend.aggregator import aggregate_results
-from backend.cache import get_cached_result, store_result
+from llm_clients import get_claude_pricing, get_gemini_pricing, get_grok_pricing
+from aggregator import aggregate_results
+from cache import get_cached_result, store_result
 
 load_dotenv()
 

@@ -1,4 +1,4 @@
-pricing-tool-env/
-.env
 users.db
+.env
 __pycache__/
+*.pyc
