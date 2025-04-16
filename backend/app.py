@@ -50,7 +50,7 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    db_path = '/opt/render/project/src/data/users.db'
+    db_path = '/opt/render/project/src/data'
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
