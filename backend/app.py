@@ -87,13 +87,14 @@ def init_db():
 
 init_db()
 
+# In backend/app.py, replace the login() route with:
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     if request.method == 'POST':
         username = request.form.get('username')
-        password = request.form.get('password')
+        password = request.form.get('password')  # This is a string from the form
         db_path = '/opt/render/project/src/data/users.db'
         try:
             conn = sqlite3.connect(db_path)
@@ -101,10 +102,14 @@ def login():
             cursor.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
             user = cursor.fetchone()
             conn.close()
-            if user and bcrypt.checkpw(password.encode('utf-8'), user[2].encode('utf-8')):
-                user_obj = User(user[0], user[1])
-                login_user(user_obj)
-                return jsonify({"success": True, "redirect": url_for('index')})
+            if user:
+                # Ensure password is a string and encode it; user[2] (password_hash) is already bytes
+                if isinstance(password, str):
+                    password = password.encode('utf-8')
+                if bcrypt.checkpw(password, user[2]):  # user[2] is already bytes
+                    user_obj = User(user[0], user[1])
+                    login_user(user_obj)
+                    return jsonify({"success": True, "redirect": url_for('index')})
             return jsonify({"error": "Invalid username or password"}), 401
         except sqlite3.OperationalError as e:
             logger.error(f"Database error during login: {e}")
