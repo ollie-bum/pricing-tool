@@ -25,16 +25,17 @@ print("Python version:", sys.version)
 print("Werkzeug version:", werkzeug.__version__)
 print("Flask version:", flask.__version__)
 
-from llm_clients import get_claude_pricing, get_gemini_pricing, get_grok_pricing
-from aggregator import aggregate_results
-from cache import get_cached_result, store_result
+# Use relative imports for backend modules
+from .llm_clients import get_claude_pricing, get_gemini_pricing, get_grok_pricing
+from .aggregator import aggregate_results
+from .cache import get_cached_result, store_result
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='frontend-dist')
+app = Flask(__name__, static_folder='../frontend-dist')
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secure-secret-key")
 CORS(app)
 
