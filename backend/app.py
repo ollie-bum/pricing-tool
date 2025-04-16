@@ -25,7 +25,7 @@ print("Python version:", sys.version)
 print("Werkzeug version:", werkzeug.__version__)
 print("Flask version:", flask.__version__)
 
-# Use relative imports for backend modules
+# Relative imports for backend modules
 from .llm_clients import get_claude_pricing, get_gemini_pricing, get_grok_pricing
 from .aggregator import aggregate_results
 from .cache import get_cached_result, store_result
