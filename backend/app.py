@@ -11,8 +11,9 @@ except ImportError:
         # Last resort fallback
         from urllib.parse import quote as url_quote
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import os
 import json
 import logging
@@ -20,6 +21,8 @@ import asyncio
 from dotenv import load_dotenv
 from datetime import datetime
 import sys
+import sqlite3
+import bcrypt
 import flask
 import werkzeug
 print("Python version:", sys.version)
@@ -39,45 +42,80 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secure-secret-key")  # Required for sessions
 CORS(app)  # Enable CORS for all routes
 
-@app.route("/")
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
+# User model for Flask-Login
+class User(UserMixin):
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
+
+# Load user from database
+@login_manager.user_loader
+def load_user(user_id):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    return User(user[0], user[1]) if user else None
+
+# Initialize SQLite database
+def init_db():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Call init_db when the app starts
+init_db()
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        conn = sqlite3.connect('users.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        conn.close()
+        if user and bcrypt.checkpw(password.encode('utf-8'), user[2].encode('utf-8')):
+            user_obj = User(user[0], user[1])
+            login_user(user_obj)
+            return redirect(url_for('index'))
+        return render_template('login.html', error="Invalid username or password")
+    return render_template('login.html', error=None)
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/')
+@login_required
 def index():
     print("📥 Received GET / request")
-    return "✅ Pricing Tool API is live!"
-
-@app.route("/api/models", methods=["GET"])
-def get_models():
-    return jsonify({"models": ["claude", "gemini", "grok"]})
-
-
-async def get_all_llm_pricing(product_info, use_sources):
-    """Get pricing from all enabled LLMs in parallel"""
-    tasks = []
-    
-    if "claude" in use_sources or not use_sources:
-        tasks.append(get_claude_pricing(product_info))
-    
-    if "gemini" in use_sources:
-        tasks.append(get_gemini_pricing(product_info))
-        
-    if "grok" in use_sources:
-        tasks.append(get_grok_pricing(product_info))
-    
-    # Run all tasks concurrently
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    # Filter out exceptions
-    valid_results = []
-    for result in results:
-        if isinstance(result, Exception):
-            logger.error(f"LLM error: {result}")
-        else:
-            valid_results.append(result)
-    
-    return valid_results
+    return render_template('index.html')  # Update to render the main UI
 
 @app.route('/api/price', methods=['POST'])
+@login_required
 def get_price_analysis():
     """API endpoint to get price analysis for a luxury item"""
     if not request.json:
@@ -139,7 +177,34 @@ def get_price_analysis():
     finally:
         loop.close()
 
+async def get_all_llm_pricing(product_info, use_sources):
+    """Get pricing from all enabled LLMs in parallel"""
+    tasks = []
+    
+    if "claude" in use_sources or not use_sources:
+        tasks.append(get_claude_pricing(product_info))
+    
+    if "gemini" in use_sources:
+        tasks.append(get_gemini_pricing(product_info))
+        
+    if "grok" in use_sources:
+        tasks.append(get_grok_pricing(product_info))
+    
+    # Run all tasks concurrently
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Filter out exceptions
+    valid_results = []
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"LLM error: {result}")
+        else:
+            valid_results.append(result)
+    
+    return valid_results
+
 @app.route('/api/models', methods=['GET'])
+@login_required
 def get_available_models():
     """Return available LLM models and their status"""
     models = [
