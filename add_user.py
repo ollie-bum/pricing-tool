@@ -17,7 +17,7 @@ def init_db():
     conn.close()
 
 def add_user(username, password):
-    init_db()  # Ensure table exists
+    init_db()
     password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     conn = sqlite3.connect('/opt/render/project/src/data/users.db')
     cursor = conn.cursor()
