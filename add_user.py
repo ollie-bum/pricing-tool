@@ -31,9 +31,10 @@ def init_db():
     except sqlite3.OperationalError as e:
         logger.error(f"Failed to initialize database {db_path}: {e}")
 
+# In add_user.py
 def add_user(username, password):
     init_db()
-    db_path = '/opt/render/project/src/data/users.db'
+    db_path = '/opt/render/project/src/data/users.db'  # Correct path
     try:
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         conn = sqlite3.connect(db_path)

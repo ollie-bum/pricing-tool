@@ -50,7 +50,7 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    db_path = '/opt/render/project/src/data'
+    db_path = '/opt/render/project/src/data/users.db'  # Correct path
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -94,8 +94,8 @@ def login():
         return redirect(url_for('index'))
     if request.method == 'POST':
         username = request.form.get('username')
-        password = request.form.get('password')  # This is a string from the form
-        db_path = '/opt/render/project/src/data/users.db'
+        password = request.form.get('password')
+        db_path = '/opt/render/project/src/data/users.db'  # Correct path
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
@@ -103,10 +103,9 @@ def login():
             user = cursor.fetchone()
             conn.close()
             if user:
-                # Ensure password is a string and encode it; user[2] (password_hash) is already bytes
                 if isinstance(password, str):
                     password = password.encode('utf-8')
-                if bcrypt.checkpw(password, user[2]):  # user[2] is already bytes
+                if bcrypt.checkpw(password, user[2]):
                     user_obj = User(user[0], user[1])
                     login_user(user_obj)
                     return jsonify({"success": True, "redirect": url_for('index')})
