@@ -98,8 +98,8 @@ init_db()
 # Subdomain routing middleware
 @app.before_request
 def handle_subdomain():
-    # Skip middleware for /login, static files, and API routes to prevent redirect loop
-    if request.path == '/login' or request.path.startswith('/frontend-dist') or request.path.startswith('/api'):
+    # Skip middleware for /login, static files, API routes, and debug endpoint to prevent redirect loop
+    if request.path == '/login' or request.path.startswith('/frontend-dist') or request.path.startswith('/api') or request.path == '/debug_oidc_token':
         return
     
     host = request.host.lower()
