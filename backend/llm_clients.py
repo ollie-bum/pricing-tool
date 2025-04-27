@@ -103,23 +103,34 @@ def create_llm_prompt(product_info):
     return prompt
 
 async def get_claude_pricing(product_info):
-    """Get pricing analysis from Claude"""
+    """Get pricing analysis from Claude using streaming"""
     prompt = create_llm_prompt(product_info)
     
     try:
-        # Call Claude API with the correct model
-        response = anthropic_client.messages.create(
-            model="claude-3-7-sonnet-20250219",  # Updated to the desired model
+        # Call Claude API with streaming
+        stream = anthropic_client.messages.create(
+            model="claude-3-7-sonnet-20250219",
             max_tokens=2000,
             temperature=0.0,
             system="You are a luxury goods pricing expert with extensive knowledge of the resale market. Provide accurate price recommendations and sale time estimates based on current market data.",
             messages=[
                 {"role": "user", "content": prompt}
-            ]
+            ],
+            stream=True,
+            extra_headers={
+                "output-128k-2025-02-19": "true"  # Include beta header for 128k output
+            }
         )
         
-        # Extract JSON from Claude's response
-        content = response.content[0].text
+        # Collect streamed content
+        content = ""
+        for event in stream:
+            if event.type == "content_block_delta":
+                content += event.delta.text
+            elif event.type == "message_start":
+                logger.info("Claude streaming started")
+            elif event.type == "message_delta":
+                logger.info("Claude streaming delta received")
         
         # Try to extract JSON from the response
         try:

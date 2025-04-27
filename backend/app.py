@@ -191,6 +191,26 @@ def get_price_analysis():
     finally:
         loop.close()
 
+async def process_product(product_info, use_sources):
+    """Helper function to process a single product"""
+    if not product_info["brand"] or not product_info["model"]:
+        return {"product": product_info, "error": "Brand and model are required"}
+    
+    cached = get_cached_result(product_info)
+    if cached:
+        return {"product": product_info, "results": cached, "source": "cache"}
+    
+    llm_results = await get_all_llm_pricing(product_info, use_sources)
+    logger.info(f"LLM results for {product_info['brand']} {product_info['model']}: {llm_results}")
+    if llm_results:
+        final_results = aggregate_results(llm_results)
+        if "error" in final_results:
+            return {"product": product_info, "error": "Failed to aggregate LLM results: " + final_results["error"]}
+        store_result(product_info, final_results)
+        return {"product": product_info, "results": final_results, "source": "llm"}
+    else:
+        return {"product": product_info, "error": "No LLM results"}
+
 @app.route('/api/bulk_price', methods=['POST'])
 @login_required
 def bulk_price():
@@ -200,38 +220,39 @@ def bulk_price():
     if not file.filename.endswith('.csv'):
         return jsonify({"error": "File must be a CSV"}), 400
     
-    results = []
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
         content = file.read().decode('utf-8')
         csv_reader = csv.DictReader(StringIO(content))
-        for row in csv_reader:
-            product_info = {
+        products = [
+            {
                 "brand": row["brand"],
                 "model": row["model"],
                 "condition": row["condition"],
                 "additional_details": row.get("additional_details", "")
             }
-            if not product_info["brand"] or not product_info["model"]:
-                results.append({"product": product_info, "error": "Brand and model are required"})
-                continue
-            cached = get_cached_result(product_info)
-            if cached:
-                results.append({"product": product_info, "results": cached, "source": "cache"})
+            for row in csv_reader
+        ]
+        
+        # Query all available LLMs
+        use_sources = ["claude", "gemini", "grok"]
+        
+        # Process all products concurrently
+        tasks = [process_product(product, use_sources) for product in products]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Handle any exceptions in results
+        final_results = []
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Error processing product: {result}")
+                final_results.append({"product": {}, "error": str(result)})
             else:
-                llm_results = loop.run_until_complete(get_all_llm_pricing(product_info, []))
-                if llm_results:
-                    final_results = aggregate_results(llm_results)
-                    if "error" in final_results:
-                        results.append({"product": product_info, "error": "Failed to aggregate LLM results: " + final_results["error"]})
-                        continue
-                    store_result(product_info, final_results)
-                    results.append({"product": product_info, "results": final_results, "source": "llm"})
-                else:
-                    results.append({"product": product_info, "error": "No LLM results"})
-        return jsonify({"results": results})
+                final_results.append(result)
+        
+        return jsonify({"results": final_results})
     except Exception as e:
         logger.error(f"Error processing bulk request: {e}")
         return jsonify({"error": str(e)}), 500
