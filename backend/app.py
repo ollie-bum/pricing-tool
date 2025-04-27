@@ -40,7 +40,6 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Update template_folder to point to the project root's templates/ directory
 app = Flask(__name__, static_folder='../frontend-dist', template_folder='../templates')
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secure-secret-key")
 CORS(app)
@@ -96,8 +95,8 @@ init_db()
 # Subdomain routing middleware
 @app.before_request
 def handle_subdomain():
-    # Skip middleware for /login to prevent redirect loop
-    if request.path == '/login':
+    # Skip middleware for /login and static files to prevent redirect loop
+    if request.path == '/login' or request.path.startswith('/frontend-dist'):
         return
     
     host = request.host.lower()
