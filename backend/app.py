@@ -7,7 +7,7 @@ except ImportError:
     except ImportError:
         from urllib.parse import quote as url_quote
 
-from flask import Flask, request, jsonify, redirect, url_for
+from flask import Flask, request, jsonify, redirect, url_for, send_from_directory
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import os
@@ -92,6 +92,18 @@ def init_db():
 
 init_db()
 
+# Subdomain routing middleware
+@app.before_request
+def handle_subdomain():
+    host = request.host.lower()
+    if host == 'pricingtool.maisonbum.com':
+        if request.path != '/pricing/single':
+            return redirect(url_for('index'))
+    elif host == 'pricingtoolbulk.maisonbum.com':
+        if request.path != '/pricing/bulk':
+            return redirect(url_for('bulk'))
+    # Default behavior for other routes (e.g., /login, /api/*)
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -112,6 +124,10 @@ def login():
                 if bcrypt.checkpw(password, user[2]):
                     user_obj = User(user[0], user[1])
                     login_user(user_obj)
+                    # Redirect based on the host
+                    host = request.host.lower()
+                    if host == 'pricingtoolbulk.maisonbum.com':
+                        return jsonify({"success": True, "redirect": url_for('bulk')})
                     return jsonify({"success": True, "redirect": url_for('index')})
             return jsonify({"error": "Invalid username or password"}), 401
         except sqlite3.OperationalError as e:
