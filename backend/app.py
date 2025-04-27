@@ -40,7 +40,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='../frontend-dist', template_folder='templates')
+# Update template_folder to point to the project root's templates/ directory
+app = Flask(__name__, static_folder='../frontend-dist', template_folder='../templates')
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secure-secret-key")
 CORS(app)
 
