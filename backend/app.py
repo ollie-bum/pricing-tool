@@ -21,6 +21,8 @@ import sqlite3
 import bcrypt
 import flask
 import werkzeug
+import csv
+from io import StringIO
 print("Python version:", sys.version)
 print("Werkzeug version:", werkzeug.__version__)
 print("Flask version:", flask.__version__)
@@ -50,7 +52,7 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    db_path = '/opt/render/project/src/data/users.db'  # Correct path
+    db_path = '/opt/render/project/src/data/users.db'
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -87,7 +89,6 @@ def init_db():
 
 init_db()
 
-# In backend/app.py, replace the login() route with:
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -95,7 +96,7 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        db_path = '/opt/render/project/src/data/users.db'  # Correct path
+        db_path = '/opt/render/project/src/data/users.db'
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
@@ -126,6 +127,12 @@ def logout():
 def index():
     print("📥 Received GET / request")
     return app.send_static_file('index.html')
+
+@app.route('/bulk')
+@login_required
+def bulk():
+    print("📥 Received GET /bulk request")
+    return app.send_static_file('bulk.html')
 
 @app.route('/api/price', methods=['POST'])
 @login_required
@@ -174,6 +181,50 @@ def get_price_analysis():
     
     except Exception as e:
         logger.error(f"Error processing request: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        loop.close()
+
+@app.route('/api/bulk_price', methods=['POST'])
+@login_required
+def bulk_price():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    file = request.files['file']
+    if not file.filename.endswith('.csv'):
+        return jsonify({"error": "File must be a CSV"}), 400
+    
+    results = []
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        content = file.read().decode('utf-8')
+        csv_reader = csv.DictReader(StringIO(content))
+        for row in csv_reader:
+            product_info = {
+                "brand": row["brand"],
+                "model": row["model"],
+                "condition": row["condition"],
+                "additional_details": row.get("additional_details", "")
+            }
+            if not product_info["brand"] or not product_info["model"]:
+                results.append({"product": product_info, "error": "Brand and model are required"})
+                continue
+            cached = get_cached_result(product_info)
+            if cached:
+                results.append({"product": product_info, "results": cached, "source": "cache"})
+            else:
+                llm_results = loop.run_until_complete(get_all_llm_pricing(product_info, []))
+                if llm_results:
+                    final_results = aggregate_results(llm_results)
+                    store_result(product_info, final_results)
+                    results.append({"product": product_info, "results": final_results, "source": "llm"})
+                else:
+                    results.append({"product": product_info, "error": "No LLM results"})
+        return jsonify({"results": results})
+    except Exception as e:
+        logger.error(f"Error processing bulk request: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
         loop.close()
