@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, static_folder='../frontend-dist', template_folder='../templates')
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secure-secret-key")
 app.config['SESSION_COOKIE_DOMAIN'] = '.maisonbum.com'  # Share session cookie across subdomains
+app.config['SESSION_COOKIE_SECURE'] = True  # Ensure cookie is sent over HTTPS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Allow cross-subdomain requests
 CORS(app)
 
 login_manager = LoginManager()
@@ -96,8 +98,8 @@ init_db()
 # Subdomain routing middleware
 @app.before_request
 def handle_subdomain():
-    # Skip middleware for /login and static files to prevent redirect loop
-    if request.path == '/login' or request.path.startswith('/frontend-dist'):
+    # Skip middleware for /login, static files, and API routes to prevent redirect loop
+    if request.path == '/login' or request.path.startswith('/frontend-dist') or request.path.startswith('/api'):
         return
     
     host = request.host.lower()
@@ -107,7 +109,7 @@ def handle_subdomain():
     elif host == 'pricingtoolbulk.maisonbum.com':
         if request.path != '/pricing/bulk':
             return redirect(url_for('bulk'))
-    # Default behavior for other routes (e.g., /api/*)
+    # Default behavior for other routes
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
