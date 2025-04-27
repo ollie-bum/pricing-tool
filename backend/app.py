@@ -7,7 +7,7 @@ except ImportError:
     except ImportError:
         from urllib.parse import quote as url_quote
 
-from flask import Flask, request, jsonify, redirect, url_for, send_from_directory
+from flask import Flask, request, jsonify, redirect, url_for, render_template
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import os
@@ -40,7 +40,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='../frontend-dist')
+app = Flask(__name__, static_folder='../frontend-dist', template_folder='templates')
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secure-secret-key")
 CORS(app)
 
@@ -151,13 +151,13 @@ def logout():
 @login_required
 def index():
     print("📥 Received GET /pricing/single request")
-    return app.send_static_file('index.html')
+    return render_template('index.html.jinja2')
 
 @app.route('/pricing/bulk')
 @login_required
 def bulk():
     print("📥 Received GET /pricing/bulk request")
-    return app.send_static_file('bulk.html')
+    return render_template('bulk.html.jinja2')
 
 @app.route('/debug_oidc_token')
 @login_required

@@ -1,0 +1,192 @@
+<!-- templates/index.html.jinja2 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maison Bum Pricing Tool</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1>Maison Bum Luxury Pricing Tool</h1>
+            <p>Get accurate market-based pricing for luxury goods</p>
+            <a href="https://pricingtoolbulk.maisonbum.com/pricing/bulk" style="float: right; margin: 10px;">Bulk Pricing</a>
+            <a href="{{ url_for('logout') }}" style="float: right; margin: 10px;">Logout</a>
+        </header>
+
+        <div class="main-content">
+            <div class="form-container">
+                <h2>Item Details</h2>
+                <form id="pricingForm">
+                    <div class="form-group">
+                        <label for="brand">Brand</label>
+                        <div class="input-with-suggestions">
+                            <input
+                                id="brand"
+                                type="text"
+                                required
+                                placeholder="e.g., Louis Vuitton"
+                                list="brandSuggestions"
+                            />
+                            <datalist id="brandSuggestions">
+                                <option value="Louis Vuitton"></option>
+                                <option value="Chanel"></option>
+                                <option value="Gucci"></option>
+                                <option value="Hermès"></option>
+                                <option value="Prada"></option>
+                                <option value="Dior"></option>
+                                <option value="Balenciaga"></option>
+                                <option value="Celine"></option>
+                                <option value="Bottega Veneta"></option>
+                                <option value="Fendi"></option>
+                                <option value="Rolex"></option>
+                                <option value="Cartier"></option>
+                                <option value="Omega"></option>
+                                <option value="Tag Heuer"></option>
+                                <option value="Patek Philippe"></option>
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="model">Model/Style Name</label>
+                        <input
+                            id="model"
+                            type="text"
+                            required
+                            placeholder="e.g., Neverfull MM"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="condition">Condition</label>
+                        <select id="condition" required>
+                            <option value="excellent">Excellent (Like New)</option>
+                            <option value="very good">Very Good (Minor Wear)</option>
+                            <option value="good">Good (Visible Wear)</option>
+                            <option value="fair">Fair (Significant Wear)</option>
+                            <option value="poor">Poor (Heavy Wear)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="additionalDetails">Additional Details</label>
+                        <textarea
+                            id="additionalDetails"
+                            placeholder="Year, special edition, inclusions (box, dust bag, etc.), any damage or repairs..."
+                            rows="4"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Select AI Models to Use:</label>
+                        <div class="llm-selection">
+                            <div class="llm-option">
+                                <input type="checkbox" id="claudeModel" class="llm-checkbox" value="claude" checked>
+                                <label for="claudeModel">Claude (Anthropic)</label>
+                            </div>
+                            <div class="llm-option">
+                                <input type="checkbox" id="geminiModel" class="llm-checkbox" value="gemini">
+                                <label for="geminiModel">Gemini (Google)</label>
+                            </div>
+                            <div class="llm-option">
+                                <input type="checkbox" id="grokModel" class="llm-checkbox" value="grok">
+                                <label for="grokModel">Grok (xAI)</label>
+                            </div>
+                        </div>
+                        <div class="cache-option">
+                            <input type="checkbox" id="skipCache">
+                            <label for="skipCache">Skip cache (always get fresh results)</label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="submit-button" id="submitButton">
+                        Get Price Analysis
+                    </button>
+                </form>
+            </div>
+
+            <div class="results-container">
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Analyzing market data...</p>
+                </div>
+
+                <div id="error" class="error-message" style="display: none;">
+                    <h3>Error</h3>
+                    <p id="errorMessage"></p>
+                </div>
+
+                <div id="results" class="results" style="display: none;">
+                    <h2>Price Analysis</h2>
+                    
+                    <div class="price-card">
+                        <div class="price-card-header sourcing">
+                            <h3>Buy Price (Sourcing)</h3>
+                        </div>
+                        <div class="price-card-body">
+                            <div class="price-range" id="buyPriceRange"></div>
+                            <p class="explanation" id="buyPriceExplanation"></p>
+                        </div>
+                    </div>
+
+                    <div class="price-card">
+                        <div class="price-card-header max-profit">
+                            <h3>Maximum Profit Listing</h3>
+                        </div>
+                        <div class="price-card-body">
+                            <div class="price-range" id="maxProfitRange"></div>
+                            <p class="explanation" id="maxProfitExplanation"></p>
+                        </div>
+                    </div>
+
+                    <div class="price-card">
+                        <div class="price-card-header quick-sale">
+                            <h3>Quick Sale Price</h3>
+                        </div>
+                        <div class="price-card-body">
+                            <div class="price-range" id="quickSaleRange"></div>
+                            <p class="explanation" id="quickSaleExplanation"></p>
+                        </div>
+                    </div>
+
+                    <div class="price-card">
+                        <div class="price-card-header expected">
+                            <h3>Expected Sale Price</h3>
+                        </div>
+                        <div class="price-card-body">
+                            <div class="price-range" id="expectedSaleRange"></div>
+                            <p class="explanation" id="expectedSaleExplanation"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="price-card">
+                        <div class="price-card-header time-to-sell">
+                            <h3>Estimated Time to Sell</h3>
+                        </div>
+                        <div class="price-card-body">
+                            <div class="price-range" id="timeToSellRange"></div>
+                            <p class="explanation" id="timeToSellExplanation"></p>
+                        </div>
+                    </div>
+
+                    <div class="market-analysis">
+                        <h3>Market Analysis</h3>
+                        <p id="marketAnalysis"></p>
+                        
+                        <div class="factors">
+                            <h4>Key Factors</h4>
+                            <ul id="factorsList"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
