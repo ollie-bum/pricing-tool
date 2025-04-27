@@ -17,7 +17,7 @@ anthropic_client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY
 
 # Initialize Gemini
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
-gemini_model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
+gemini_model = genai.GenerativeModel('gemini-2.5-pro-exp-03-25')
 
 # Placeholder for Grok
 class GrokClient:
