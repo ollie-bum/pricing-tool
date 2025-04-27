@@ -213,7 +213,7 @@ async def process_product(product_info, use_sources):
 
 @app.route('/api/bulk_price', methods=['POST'])
 @login_required
-def bulk_price():
+async def bulk_price():
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
     file = request.files['file']
