@@ -42,7 +42,7 @@ class GrokClient:
             logger.error(f"Grok API request failed: {e}")
             raise
 
-# Initialize Grok (replace with actual when available)
+# Initialize Grok
 grok_client = GrokClient(api_key=os.environ.get("GROK_API_KEY"))
 
 def create_llm_prompt(product_info):
@@ -107,9 +107,9 @@ async def get_claude_pricing(product_info):
     prompt = create_llm_prompt(product_info)
     
     try:
-        # Call Claude API
+        # Call Claude API with the correct model
         response = anthropic_client.messages.create(
-            model="claude-3-sonnet-20240229",
+            model="claude-3-7-sonnet-20250219",  # Updated to the desired model
             max_tokens=2000,
             temperature=0.0,
             system="You are a luxury goods pricing expert with extensive knowledge of the resale market. Provide accurate price recommendations and sale time estimates based on current market data.",
@@ -123,10 +123,8 @@ async def get_claude_pricing(product_info):
         
         # Try to extract JSON from the response
         try:
-            # First try to parse the whole response as JSON
             pricing_data = json.loads(content)
         except json.JSONDecodeError:
-            # If that fails, try to extract JSON using common patterns
             json_match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
             if json_match:
                 try:
@@ -137,7 +135,6 @@ async def get_claude_pricing(product_info):
                         "raw_response": content
                     }
             else:
-                # No JSON block found, return the raw response
                 return {
                     "error": "Could not extract JSON from Claude response",
                     "raw_response": content
@@ -146,7 +143,7 @@ async def get_claude_pricing(product_info):
         return {
             "source": "claude",
             "data": pricing_data,
-            "confidence": 0.9  # Claude typically provides high-quality pricing insights
+            "confidence": 0.9
         }
         
     except Exception as e:
@@ -171,10 +168,8 @@ async def get_gemini_pricing(product_info):
         
         # Try to extract JSON from the response
         try:
-            # First try to parse the whole response as JSON
             pricing_data = json.loads(content)
         except json.JSONDecodeError:
-            # If that fails, try to extract JSON using common patterns
             json_match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
             if json_match:
                 try:
@@ -185,7 +180,6 @@ async def get_gemini_pricing(product_info):
                         "raw_response": content
                     }
             else:
-                # No JSON block found, return the raw response
                 return {
                     "error": "Could not extract JSON from Gemini response",
                     "raw_response": content
@@ -194,7 +188,7 @@ async def get_gemini_pricing(product_info):
         return {
             "source": "gemini",
             "data": pricing_data,
-            "confidence": 0.8  # Gemini has good knowledge but may be less specialized
+            "confidence": 0.8
         }
         
     except Exception as e:
@@ -206,7 +200,6 @@ async def get_grok_pricing(product_info):
     prompt = create_llm_prompt(product_info)
     
     try:
-        # Call Grok API (implementation may vary based on actual API structure)
         response = await grok_client.chat.completions.create(
             model="grok-3-beta",
             messages=[
@@ -219,12 +212,9 @@ async def get_grok_pricing(product_info):
         
         content = response.choices[0].message.content
         
-        # Try to extract JSON from the response
         try:
-            # First try to parse the whole response as JSON
             pricing_data = json.loads(content)
         except json.JSONDecodeError:
-            # If that fails, try to extract JSON using common patterns
             json_match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
             if json_match:
                 try:
@@ -235,7 +225,6 @@ async def get_grok_pricing(product_info):
                         "raw_response": content
                     }
             else:
-                # No JSON block found, return the raw response
                 return {
                     "error": "Could not extract JSON from Grok response",
                     "raw_response": content
@@ -244,7 +233,7 @@ async def get_grok_pricing(product_info):
         return {
             "source": "grok",
             "data": pricing_data,
-            "confidence": 0.85  # Grok may have good market knowledge
+            "confidence": 0.85
         }
         
     except Exception as e:
