@@ -95,6 +95,10 @@ init_db()
 # Subdomain routing middleware
 @app.before_request
 def handle_subdomain():
+    # Skip middleware for /login to prevent redirect loop
+    if request.path == '/login':
+        return
+    
     host = request.host.lower()
     if host == 'pricingtool.maisonbum.com':
         if request.path != '/pricing/single':
@@ -102,11 +106,14 @@ def handle_subdomain():
     elif host == 'pricingtoolbulk.maisonbum.com':
         if request.path != '/pricing/bulk':
             return redirect(url_for('bulk'))
-    # Default behavior for other routes (e.g., /login, /api/*)
+    # Default behavior for other routes (e.g., /api/*)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
+        host = request.host.lower()
+        if host == 'pricingtoolbulk.maisonbum.com':
+            return redirect(url_for('bulk'))
         return redirect(url_for('index'))
     if request.method == 'POST':
         username = request.form.get('username')
@@ -124,7 +131,6 @@ def login():
                 if bcrypt.checkpw(password, user[2]):
                     user_obj = User(user[0], user[1])
                     login_user(user_obj)
-                    # Redirect based on the host
                     host = request.host.lower()
                     if host == 'pricingtoolbulk.maisonbum.com':
                         return jsonify({"success": True, "redirect": url_for('bulk')})
