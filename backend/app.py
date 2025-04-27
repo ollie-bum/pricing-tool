@@ -166,6 +166,12 @@ def get_price_analysis():
             }), 500
         
         final_results = aggregate_results(llm_results)
+        if "error" in final_results:
+            return jsonify({
+                "error": "Failed to aggregate LLM results",
+                "details": final_results["error"]
+            }), 500
+            
         if "meta" not in final_results:
             final_results["meta"] = {}
         final_results["meta"]["timestamp"] = datetime.now().isoformat()
@@ -218,6 +224,9 @@ def bulk_price():
                 llm_results = loop.run_until_complete(get_all_llm_pricing(product_info, []))
                 if llm_results:
                     final_results = aggregate_results(llm_results)
+                    if "error" in final_results:
+                        results.append({"product": product_info, "error": "Failed to aggregate LLM results: " + final_results["error"]})
+                        continue
                     store_result(product_info, final_results)
                     results.append({"product": product_info, "results": final_results, "source": "llm"})
                 else:
