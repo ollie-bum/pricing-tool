@@ -22,7 +22,10 @@ import bcrypt
 import flask
 import werkzeug
 import csv
-from io import StringIO
+from io import StringIO, BytesIO
+from google.cloud import storage
+from google.oauth2 import service_account
+from google.auth import compute_engine
 print("Python version:", sys.version)
 print("Werkzeug version:", werkzeug.__version__)
 print("Flask version:", flask.__version__)
@@ -122,21 +125,29 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/')
+@app.route('/pricing/single')
 @login_required
 def index():
-    print("📥 Received GET / request")
+    print("📥 Received GET /pricing/single request")
     return app.send_static_file('index.html')
 
-@app.route('/bulk')
+@app.route('/pricing/bulk')
 @login_required
 def bulk():
-    print("📥 Received GET /bulk request")
+    print("📥 Received GET /pricing/bulk request")
     return app.send_static_file('bulk.html')
+
+@app.route('/debug_oidc_token')
+@login_required
+def debug_oidc_token():
+    # Log the OIDC token provided by Render
+    token = os.environ.get('RENDER_OIDC_TOKEN', 'No token found')
+    logger.info(f"Render OIDC Token: {token}")
+    return jsonify({"oidc_token": token})
 
 @app.route('/api/price', methods=['POST'])
 @login_required
-def get_price_analysis():
+async def get_price_analysis():
     if not request.json:
         return jsonify({"error": "No JSON data provided"}), 400
     
@@ -191,66 +202,217 @@ def get_price_analysis():
     finally:
         loop.close()
 
-async def process_product(product_info, use_sources):
-    """Helper function to process a single product"""
-    if not product_info["brand"] or not product_info["model"]:
-        return {"product": product_info, "error": "Brand and model are required"}
+async def process_product_batch(products, use_sources):
+    """Process a batch of products by combining them into a single LLM request"""
+    if not products:
+        return []
     
-    cached = get_cached_result(product_info)
+    # Combine prompts for all products in the batch
+    combined_prompt = ""
+    for idx, product in enumerate(products):
+        if not product["brand"] or not product["model"]:
+            return [{"product": product, "error": "Brand and model are required"} for product in products]
+        
+        # Check cache for each product
+        cached = get_cached_result(product)
+        if cached:
+            return [{"product": product, "results": cached, "source": "cache"} for product in products]
+        
+        condition = product.get('condition', 'excellent')
+        brand = product.get('brand', '')
+        model = product.get('model', '')
+        details = product.get('additional_details', '')
+        prompt = f"""
+        Item {idx + 1}:
+        Brand: {brand}
+        Model: {model}
+        Condition: {condition}
+        Additional Details: {details}
+        """
+        combined_prompt += prompt + "\n"
+    
+    combined_prompt += """
+    For each item listed above, provide a market price analysis with the following details:
+    1. A price range to buy the item at (for resale)
+    2. An initial listing price to maximize profit
+    3. A price to list at for a quick sale
+    4. The most likely final sale price
+    5. The estimated time to sell (in days or weeks)
+    Include explanations for each price range and time to sell, considering factors like rarity, collectible status, or market trends. Format the response as a JSON array where each element corresponds to an item in the order listed, with the structure:
+    [
+      {
+        "buy_price": {"min": value, "max": value, "explanation": "reason"},
+        "max_profit_price": {"min": value, "max": value, "explanation": "reason"},
+        "quick_sale_price": {"min": value, "max": value, "explanation": "reason"},
+        "expected_sale_price": {"min": value, "max": value, "explanation": "reason"},
+        "estimated_time_to_sell": {"min": value, "max": value, "unit": "days OR weeks", "explanation": "factors"},
+        "factors": ["factor1", "factor2"],
+        "market_analysis": "brief analysis"
+      },
+      ...
+    ]
+    """
+    
+    # Query LLMs with the combined prompt
+    llm_results = await get_all_llm_pricing({"combined_prompt": combined_prompt}, use_sources)
+    logger.info(f"LLM results for batch: {llm_results}")
+    
+    if not llm_results:
+        return [{"product": product, "error": "No LLM results"} for product in products]
+    
+    final_results = aggregate_results(llm_results)
+    if "error" in final_results:
+        return [{"product": product, "error": "Failed to aggregate LLM results: " + final_results["error"]} for product in products]
+    
+    # Ensure the results match the number of products
+    if not isinstance(final_results, list) or len(final_results) != len(products):
+        return [{"product": product, "error": "Unexpected LLM response format"} for product in products]
+    
+    # Store results in cache and return
+    batch_results = []
+    for product, result in zip(products, final_results):
+        store_result(product, result)
+        batch_results.append({"product": product, "results": result, "source": "llm"})
+    
+    return batch_results
+
+async def process_product(product, use_sources):
+    """Process a single product (fallback for non-batched processing)"""
+    if not product["brand"] or not product["model"]:
+        return {"product": product, "error": "Brand and model are required"}
+    
+    cached = get_cached_result(product)
     if cached:
-        return {"product": product_info, "results": cached, "source": "cache"}
+        return {"product": product, "results": cached, "source": "cache"}
     
-    llm_results = await get_all_llm_pricing(product_info, use_sources)
-    logger.info(f"LLM results for {product_info['brand']} {product_info['model']}: {llm_results}")
+    llm_results = await get_all_llm_pricing(product, use_sources)
+    logger.info(f"LLM results for {product['brand']} {product['model']}: {llm_results}")
     if llm_results:
         final_results = aggregate_results(llm_results)
         if "error" in final_results:
-            return {"product": product_info, "error": "Failed to aggregate LLM results: " + final_results["error"]}
-        store_result(product_info, final_results)
-        return {"product": product_info, "results": final_results, "source": "llm"}
+            return {"product": product, "error": "Failed to aggregate LLM results: " + final_results["error"]}
+        store_result(product, final_results)
+        return {"product": product, "results": final_results, "source": "llm"}
     else:
-        return {"product": product_info, "error": "No LLM results"}
+        return {"product": product, "error": "No LLM results"}
 
 @app.route('/api/bulk_price', methods=['POST'])
 @login_required
 async def bulk_price():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-    file = request.files['file']
-    if not file.filename.endswith('.csv'):
-        return jsonify({"error": "File must be a CSV"}), 400
+    # Check if processing from GCS
+    gcs_bucket = request.form.get('gcs_bucket')
+    gcs_file_path = request.form.get('gcs_file_path')
+    
+    if gcs_bucket and gcs_file_path:
+        # Initialize GCS client using Workload Identity
+        credentials = compute_engine.IDTokenCredentials(
+            audience=f"//iam.googleapis.com/projects/{os.environ.get('GOOGLE_CLOUD_PROJECT')}/locations/global/workloadIdentityPools/render-identity-pool/providers/render-oidc",
+            target_audience=f"//iam.googleapis.com/projects/{os.environ.get('GOOGLE_CLOUD_PROJECT')}/locations/global/workloadIdentityPools/render-identity-pool/providers/render-oidc"
+        )
+        storage_client = storage.Client(credentials=credentials, project=os.environ.get("GOOGLE_CLOUD_PROJECT"))
+        bucket = storage_client.bucket(gcs_bucket)
+        blob = bucket.blob(gcs_file_path)
+        
+        # Download CSV from GCS
+        try:
+            content = blob.download_as_text()
+        except Exception as e:
+            logger.error(f"Error downloading file from GCS: {e}")
+            return jsonify({"error": f"Failed to download file from GCS: {str(e)}"}), 500
+    else:
+        # Use uploaded file
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        file = request.files['file']
+        if not file.filename.endswith('.csv'):
+            return jsonify({"error": "File must be a CSV"}), 400
+        content = file.read().decode('utf-8')
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
-        content = file.read().decode('utf-8')
         csv_reader = csv.DictReader(StringIO(content))
-        products = [
-            {
+        products = []
+        csv_rows = []
+        for row in csv_reader:
+            product = {
                 "brand": row["brand"],
                 "model": row["model"],
                 "condition": row["condition"],
                 "additional_details": row.get("additional_details", "")
             }
-            for row in csv_reader
-        ]
+            products.append(product)
+            csv_rows.append(row)
         
         # Query all available LLMs
         use_sources = ["claude", "gemini", "grok"]
         
-        # Process all products concurrently
-        tasks = [process_product(product, use_sources) for product in products]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Handle any exceptions in results
+        # Process in batches of 10
+        batch_size = 10
         final_results = []
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error(f"Error processing product: {result}")
-                final_results.append({"product": {}, "error": str(result)})
+        for i in range(0, len(products), batch_size):
+            batch = products[i:i + batch_size]
+            batch_results = await process_product_batch(batch, use_sources)
+            final_results.extend(batch_results)
+            if i + batch_size < len(products):
+                await asyncio.sleep(12)  # Throttle to avoid rate limits
+        
+        # Prepare updated CSV with pricing data
+        updated_rows = []
+        for product_result, original_row in zip(final_results, csv_rows):
+            row = original_row.copy()
+            if "error" in product_result:
+                row["buy_price_min"] = ""
+                row["buy_price_max"] = ""
+                row["max_profit_price_min"] = ""
+                row["max_profit_price_max"] = ""
+                row["quick_sale_price_min"] = ""
+                row["quick_sale_price_max"] = ""
+                row["expected_sale_price_min"] = ""
+                row["expected_sale_price_max"] = ""
+                row["time_to_sell_min"] = ""
+                row["time_to_sell_max"] = ""
+                row["time_to_sell_unit"] = ""
+                row["error"] = product_result["error"]
             else:
-                final_results.append(result)
+                result = product_result["results"]
+                row["buy_price_min"] = result["buy_price"]["min"]
+                row["buy_price_max"] = result["buy_price"]["max"]
+                row["max_profit_price_min"] = result["max_profit_price"]["min"]
+                row["max_profit_price_max"] = result["max_profit_price"]["max"]
+                row["quick_sale_price_min"] = result["quick_sale_price"]["min"]
+                row["quick_sale_price_max"] = result["quick_sale_price"]["max"]
+                row["expected_sale_price_min"] = result["expected_sale_price"]["min"]
+                row["expected_sale_price_max"] = result["expected_sale_price"]["max"]
+                row["time_to_sell_min"] = result["estimated_time_to_sell"]["min"]
+                row["time_to_sell_max"] = result["estimated_time_to_sell"]["max"]
+                row["time_to_sell_unit"] = result["estimated_time_to_sell"]["unit"]
+                row["error"] = ""
+            updated_rows.append(row)
+        
+        # Write updated CSV back to GCS if applicable
+        if gcs_bucket and gcs_file_path:
+            output = StringIO()
+            fieldnames = list(csv_rows[0].keys()) + [
+                "buy_price_min", "buy_price_max",
+                "max_profit_price_min", "max_profit_price_max",
+                "quick_sale_price_min", "quick_sale_price_max",
+                "expected_sale_price_min", "expected_sale_price_max",
+                "time_to_sell_min", "time_to_sell_max", "time_to_sell_unit",
+                "error"
+            ]
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in updated_rows:
+                writer.writerow(row)
+            
+            try:
+                blob.upload_from_string(output.getvalue(), content_type='text/csv')
+                logger.info(f"Updated CSV uploaded to GCS: {gcs_file_path}")
+            except Exception as e:
+                logger.error(f"Error uploading updated CSV to GCS: {e}")
+                return jsonify({"error": f"Failed to upload updated CSV to GCS: {str(e)}"}), 500
         
         return jsonify({"results": final_results})
     except Exception as e:
